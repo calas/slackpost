@@ -1,4 +1,6 @@
 require 'slackpost/version'
+require 'slackpost/configuration'
+require 'slackpost/exceptions'
 
 require 'uri'
 require 'json'
@@ -7,16 +9,23 @@ require 'net/https'
 
 # docs
 module Slackpost
-  class SlackpostError < StandardError; end
   class << self
-    def send_simple_msg_to_channel(msg, channel)
+    def config
+      @config ||= Configuration.new
+    end
+
+    def configure
+      yield(config)
+    end
+
+    def simple_msg_to_channel(msg, channel)
       body = { channel: channel,
                link_names: 1,
                text: msg }
       send_slackpost(body)
     end
 
-    def send_attachment_msg_to_channel(msg, channel, att_title, att_value, att_color)
+    def attachment_msg_to_channel(msg, channel, att_title, att_value, att_color)
       body = { channel: channel,
                link_names: 1,
                text: msg,
@@ -28,19 +37,16 @@ module Slackpost
     end
 
     def send_slackpost(body)
-      webhook_url = "https://hooks.slack.com/services/#{CONFIG_TOKEN}"
-      begin
-        uri = URI.parse(webhook_url)
-        response = Net::HTTP.start(uri.host, uri.port, use_ssl: true) do |http|
-          request = Net::HTTP::Post.new(uri)
-          request['Content-Type'] = 'application/json'
-          request.body = body.to_json
-          http.request(request)
-        end
-        response
-      rescue StandardError => error
-        raise SlackpostError error
+      uri = URI.parse("https://hooks.slack.com/services/#{config.slack_token}")
+      response = Net::HTTP.start(uri.host, uri.port, use_ssl: true) do |http|
+        request = Net::HTTP::Post.new(uri)
+        request['Content-Type'] = 'application/json'
+        request.body = body.to_json
+        http.request(request)
       end
+      raise SlackpostError if response.code != '200'
+
+      response
     end
   end
 end
